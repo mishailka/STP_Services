@@ -2,8 +2,9 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import tempfile
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 from flask import Blueprint, request, render_template_string, session, send_file
 
@@ -35,6 +36,9 @@ HTML = """
   textarea{width:100%; min-height:180px; font-family:ui-monospace,Menlo,Consolas,monospace}
   .actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px}
   .badge{display:inline-block; padding:2px 8px; border:1px solid #334155; border-radius:999px; font-size:12px; color:#cbd5e1}
+  .grid-form{display:grid; grid-template-columns: 1fr 240px; gap:12px; align-items:start}
+  .stack{display:flex; flex-direction:column; gap:8px}
+  input[type="text"]{width:100%; padding:8px 10px; border-radius:10px; border:1px solid #262b33; background:#0e1116; color:#e6e6e6}
 </style>
 <body>
 <div class="container">
@@ -77,16 +81,23 @@ HTML = """
       <tr><th>production_date (product)</th><td>{{ prod.production_date }}</td></tr>
     </table>
 
-    <!-- Одна форма: коды + кнопки скачивания берут коды прямо из textarea -->
-    <h3>Коды (по одному в строку)</h3>
+    <!-- Одна форма: имя файла + коды + кнопки скачивания берут значения напрямую -->
+    <h3>Коды и выгрузка</h3>
     <form method="POST">
-      <textarea name="codes" placeholder="вставьте сюда коды (KI)…"></textarea>
-      <div class="actions">
-        <button type="submit" formaction="download/json">Скачать ядро JSON</button>
-        <button type="submit" formaction="download/csv">Скачать CSV (коды)</button>
-        <button type="submit" formaction="download/xml">Скачать XML (ввод в оборот)</button>
+      <div class="grid-form">
+        <div class="stack">
+          <label class="muted">Коды (по одному в строку)</label>
+          <textarea name="codes" placeholder="вставьте сюда коды (KI)…"></textarea>
+        </div>
+        <div class="stack">
+          <label class="muted">Имя файла (без расширения)</label>
+          <input type="text" name="fname" placeholder="например: introduce_2025-11-02">
+          <button type="submit" formaction="download/json">Скачать JSON (ядро+шаблон)</button>
+          <button type="submit" formaction="download/csv">Скачать CSV (коды)</button>
+          <button type="submit" formaction="download/xml">Скачать XML (ввод в оборот)</button>
+        </div>
       </div>
-      <div class="muted">Для CONTRACT/OWN: отдельный &lt;product&gt; на каждый код, код — в &lt;ki&gt;.</div>
+      <div class="muted" style="margin-top:8px">XML: всё после &lt;GT&gt; в коде отбрасывается (и сам маркер тоже).</div>
     </form>
   {% endif %}
 </div>
@@ -124,6 +135,19 @@ def _coalesce_str(d: Dict[str, Any], key: str, default: str = "") -> str:
         return v.strip()
     return default if v is None else str(v)
 
+def _sanitize_fname(name: str, default: str = "export") -> str:
+    """
+    Очищает имя файла: запрещённые символы → '_', обрезает длину.
+    Пустая строка -> default.
+    """
+    if not name:
+        return default
+    name = re.sub(r'[\\/:*?"<>|\r\n\t]+', "_", name)
+    name = name.strip(" .") or default
+    if len(name) > 128:
+        name = name[:128]
+    return name
+
 def _extract_product_template(raw: Dict[str, Any], core_prod_date: str) -> Dict[str, str]:
     """
     Шаблон полей продукта:
@@ -139,7 +163,6 @@ def _extract_product_template(raw: Dict[str, Any], core_prod_date: str) -> Dict[
     else:
         p = {}
 
-    # сертификаты
     cert_type, cert_num, cert_date = "", "", ""
     certs = p.get("certificate_document_data") or []
     if isinstance(certs, list) and certs:
@@ -178,6 +201,23 @@ def _parse_codes(text: str) -> List[str]:
         codes.append(s)
     return codes
 
+def _cut_at_gt(code: str) -> str:
+    """
+    Режем строку по маркеру <GT> или &lt;GT&gt;:
+      'AAA<GT>BBB'    -> 'AAA'
+      'AAA&lt;GT&gt;B' -> 'AAA'
+    Если маркера нет — возвращаем как есть.
+    """
+    # сначала буквальный <GT>
+    idx = code.find("<GT>")
+    if idx >= 0:
+        return code[:idx]
+    # затем HTML-энкод
+    idx = code.find("&lt;GT&gt;")
+    if idx >= 0:
+        return code[:idx]
+    return code
+
 def _csv_from_codes(codes: List[str]) -> bytes:
     safe = [(c or "").replace("\r", "").replace("\n", "") for c in codes if c]
     out = "\n".join(safe) + ("\n" if safe else "")
@@ -188,9 +228,10 @@ def _xml_from(core: Dict[str, Any], prod: Dict[str, Any], codes: List[str]) -> b
     Генерируем XML:
       - CONTRACT_PRODUCTION → <introduce_contract version="7">
       - OWN_PRODUCTION     → <introduce_rf version="9">
-    Для каждого кода создаём <product>:
-      <ki><![CDATA[CODE]]></ki>
-      <production_date>, <tnved_code>, <certificate_type>, <certificate_number>, <certificate_date>, <vsd_number>
+    Для каждого кода создаём <product>, причём:
+      - код берём ДО маркера <GT> (и &lt;GT&gt;), сам маркер и хвост отбрасываем;
+      - в <product> всегда: <ki>, <production_date>, <tnved_code>, <certificate_type>,
+        <certificate_number>, <certificate_date>, <vsd_number>.
     """
     is_contract = (core.get("production_type") == "CONTRACT_PRODUCTION")
 
@@ -217,8 +258,8 @@ def _xml_from(core: Dict[str, Any], prod: Dict[str, Any], codes: List[str]) -> b
     prod_date_fallback = (core.get("production_date") or "").strip()
 
     lines.append('  <products_list>')
-    for c in codes:
-        code = (c or "").strip()
+    for raw_code in codes:
+        code = _cut_at_gt((raw_code or "").strip())
         if not code:
             continue
         per_item_prod_date = (prod.get("production_date") or prod_date_fallback or "").strip()
@@ -279,14 +320,12 @@ def upload():
         message = "Можно загрузить только JSON (.json)"
         return render_template_string(HTML, file_info=None, message=message, ok=ok, core=session.get(SESSION_CORE), prod=session.get(SESSION_PROD) or {}, max_mb=MAX_BYTES // (1024*1024))
 
-    # читаем и валидируем размер
     try:
         data_bytes = _read_limited(f, MAX_BYTES)
     except Exception as e:
         message = f"Ошибка чтения файла: {e}"
         return render_template_string(HTML, file_info=None, message=message, ok=ok, core=session.get(SESSION_CORE), prod=session.get(SESSION_PROD) or {}, max_mb=MAX_BYTES // (1024*1024))
 
-    # пытаемся распарсить JSON сразу
     try:
         text = data_bytes.decode("utf-8", errors="strict")
         raw = json.loads(text)
@@ -296,12 +335,10 @@ def upload():
         core = _normalize_core(raw)
         prod = _extract_product_template(raw, core_prod_date=core.get("production_date",""))
 
-        # сохраняем в сессию
         session[SESSION_CORE] = core
         session[SESSION_PROD] = prod
         session.modified = True
 
-        # временный файл не обязателен, но оставим для отладки
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
                 tmp.write(data_bytes)
@@ -324,21 +361,23 @@ def upload():
 
     return render_template_string(HTML, file_info=None, message=message, ok=False, core=None, prod=None, max_mb=MAX_BYTES // (1024*1024))
 
-# --- скачивания: берут коды напрямую из текущей формы (textarea name="codes") ---
+# --- скачивания (берут имя файла и коды из текущей формы) ---
 @bp.route("/download/json", methods=["POST"])
 def download_json():
     core = session.get(SESSION_CORE)
     prod = session.get(SESSION_PROD)
     if not core:
         return render_template_string(HTML, file_info=None, message="Нет данных: загрузите JSON", ok=False, core=None, prod=None, max_mb=MAX_BYTES // (1024*1024))
+    fname = _sanitize_fname(request.form.get("fname", "") or "core_and_template")
     buf = io.BytesIO(json.dumps({"core": core, "product_template": prod}, ensure_ascii=False, indent=2).encode("utf-8"))
-    return send_file(buf, mimetype="application/json", as_attachment=True, download_name="core_and_template.json")
+    return send_file(buf, mimetype="application/json", as_attachment=True, download_name=f"{fname}.json")
 
 @bp.route("/download/csv", methods=["POST"])
 def download_csv():
     codes = _parse_codes(request.form.get("codes", ""))
     payload = _csv_from_codes(codes)
-    return send_file(io.BytesIO(payload), mimetype="text/csv", as_attachment=True, download_name="codes.csv")
+    fname = _sanitize_fname(request.form.get("fname", "") or "codes")
+    return send_file(io.BytesIO(payload), mimetype="text/csv", as_attachment=True, download_name=f"{fname}.csv")
 
 @bp.route("/download/xml", methods=["POST"])
 def download_xml():
@@ -348,13 +387,14 @@ def download_xml():
         return render_template_string(HTML, file_info=None, message="Нет данных: загрузите JSON", ok=False, core=None, prod=None, max_mb=MAX_BYTES // (1024*1024))
     codes = _parse_codes(request.form.get("codes", ""))
     payload = _xml_from(core, prod, codes)
-    return send_file(io.BytesIO(payload), mimetype="application/xml", as_attachment=True, download_name="introduce.xml")
+    fname = _sanitize_fname(request.form.get("fname", "") or "introduce")
+    return send_file(io.BytesIO(payload), mimetype="application/xml", as_attachment=True, download_name=f"{fname}.xml")
 
 # экспорт сервиса
 service = ServiceBase(
     id="json-inspector",
     name="JSON Инспектор",
-    description="Парсит сразу при загрузке. Один <product> на код (ki). CONTRACT/OWN.",
+    description="Парсит сразу при загрузке. Один <product> на код (ki). CONTRACT/OWN. Задание имени файла. Резка по <GT>.",
     icon="🧪",
     blueprint=bp,
 )
