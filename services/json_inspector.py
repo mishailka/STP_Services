@@ -219,10 +219,21 @@ def _cut_at_gt(code: str) -> str:
     return code
 
 def _csv_from_codes(codes: List[str]) -> bytes:
-    safe = [(c or "").replace("\r", "").replace("\n", "") for c in codes if c]
-    out = "\n".join(safe) + ("\n" if safe else "")
-    return out.encode("utf-8-sig")
-
+    """
+    Генерим CSV с одной колонкой:
+    - НЕ режем по <GT> (это только для XML)
+    - <GS>/<lt;GS&gt; -> реальный GS (0x1D) уже сделано на этапе _parse_codes()
+    - каждую строку оборачиваем в кавычки по RFC-4180, экранируя внутренние "
+    """
+    rows: List[str] = []
+    for c in codes:
+        if c is None:
+            c = ""
+        # Экранируем двойные кавычки
+        val = str(c).replace('"', '""')
+        rows.append(f'"{val}"')
+    csv_text = "\n".join(rows) + ("\n" if rows else "")
+    return csv_text.encode("utf-8-sig")
 def _xml_from(core: Dict[str, Any], prod: Dict[str, Any], codes: List[str]) -> bytes:
     """
     Генерируем XML:
