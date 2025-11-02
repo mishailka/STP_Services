@@ -218,22 +218,38 @@ def _cut_at_gt(code: str) -> str:
         return code[:idx]
     return code
 
-def _csv_from_codes(codes: List[str]) -> bytes:
+def _xml_prepare_code(raw_code: str) -> str:
     """
-    Генерим CSV с одной колонкой:
-    - НЕ режем по <GT> (это только для XML)
-    - <GS>/<lt;GS&gt; -> реальный GS (0x1D) уже сделано на этапе _parse_codes()
-    - каждую строку оборачиваем в кавычки по RFC-4180, экранируя внутренние "
+    Для XML:
+      - режем по <GT> / &lt;GT&gt; (маркер и хвост выкидываем)
+      - удаляем GS (0x1D) и любые текстовые <GS> / &lt;GS&gt;
     """
-    rows: List[str] = []
+    s = (raw_code or "").strip()
+    # обрезаем по GT
+    s = _cut_at_gt(s)
+    # убираем GS: и реальный символ, и текстовые маркеры
+    s = s.replace("\x1D", "")
+    s = s.replace("<GS>", "").replace("&lt;GS&gt;", "")
+    return s
+
+def _csv_from_codes(codes: list[str]) -> bytes:
+    """
+    CSV одной колонкой, по строке на код.
+    - НЕ используем кавычки
+    - <GS>/&lt;GS&gt; уже превращены в \x1D в _parse_codes()
+    - ДОПОЛНИТЕЛЬНО: <GT>/&lt;GT&gt; → \x1D (только для CSV)
+    """
+    rows: list[str] = []
     for c in codes:
-        if c is None:
-            c = ""
-        # Экранируем двойные кавычки
-        val = str(c).replace('"', '""')
-        rows.append(f'"{val}"')
+        c = (c or "")
+        c = c.replace("<GT>", "\x1D").replace("&lt;GT&gt;", "\x1D")
+        c = c.replace("\r", "")  # на всякий случай
+        rows.append(c)
     csv_text = "\n".join(rows) + ("\n" if rows else "")
     return csv_text.encode("utf-8-sig")
+
+
+
 def _xml_from(core: Dict[str, Any], prod: Dict[str, Any], codes: List[str]) -> bytes:
     """
     Генерируем XML:
@@ -270,7 +286,7 @@ def _xml_from(core: Dict[str, Any], prod: Dict[str, Any], codes: List[str]) -> b
 
     lines.append('  <products_list>')
     for raw_code in codes:
-        code = _cut_at_gt((raw_code or "").strip())
+        code = _xml_prepare_code(raw_code)
         if not code:
             continue
         per_item_prod_date = (prod.get("production_date") or prod_date_fallback or "").strip()
