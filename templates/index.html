@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Сервисы</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Сервисы</h1>
+    <input id="search" type="search" placeholder="Поиск по сервисам…" aria-label="Поиск" autofocus>
+    <div id="grid" class="grid">
+      {% for t in tiles %}
+      <a class="card" href="{{ t.path or '#' }}" data-name="{{ t.name | lower }}" data-desc="{{ t.description | lower }}">
+        <div class="icon">{{ t.icon }}</div>
+        <div class="title">{{ t.name }}</div>
+        <div class="desc">{{ t.description }}</div>
+      </a>
+      {% endfor %}
+    </div>
+    {% if not tiles %}
+      <p class="muted">Сервисы не найдены. Добавьте модуль в папку <code>services/</code>.</p>
+    {% endif %}
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
