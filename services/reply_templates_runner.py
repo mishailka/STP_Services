@@ -8,8 +8,6 @@ from .template_store import load_all
 
 bp = Blueprint("reply_templates_runner", __name__)
 
-# ---------- РЕНДЕР ----------
-
 def _greeting() -> str:
     hour = datetime.datetime.now().hour
     if 5 <= hour < 12:  return "Доброе утро!"
@@ -85,8 +83,6 @@ def render_template_obj(tpl: Dict[str, Any], values: Dict[str, Any]) -> str:
         res += render_block(b, values)
     return res.strip()
 
-# ---------- UI ----------
-
 HTML = """
 <!doctype html>
 <html lang="ru"><meta charset="utf-8">
@@ -139,7 +135,6 @@ pre{white-space:pre-wrap;word-break:break-word;background:#0e1116;border:1px sol
 </div>
 <script>
 let items=[], current=null, values={};
-
 function $id(x){return document.getElementById(x)}
 
 async function loadList(){
@@ -147,7 +142,6 @@ async function loadList(){
   items = await res.json();
   renderList(items);
 }
-
 function renderList(arr){
   const box = $id("tpl-list"); box.innerHTML = "";
   arr.forEach(t=>{
@@ -158,13 +152,11 @@ function renderList(arr){
     box.appendChild(a);
   });
 }
-
 function filterList(){
   const q = ($id("q").value || "").toLowerCase();
   const filtered = items.filter(x=>(x.name||"").toLowerCase().includes(q));
   renderList(filtered);
 }
-
 async function openTemplate(id){
   const data = await fetch("get?id="+id).then(r=>r.json());
   current = data; values = {};
@@ -172,10 +164,8 @@ async function openTemplate(id){
   renderInputs();
   $id("preview").textContent = "";
 }
-
 function flagHint(flags){
-  const f = flags||{};
-  const arr = [];
+  const f = flags||{}; const arr = [];
   if (f.newline) arr.push("новая строка (до)");
   if (f.newlineAfter) arr.push("новая строка (после)");
   if (f.spaceBefore) arr.push("пробел до");
@@ -185,32 +175,24 @@ function flagHint(flags){
   if (f.capitalize) arr.push("Capitalize");
   return arr.join(", ");
 }
-
 function renderInputs(){
   const root = $id("inputs"); root.innerHTML="";
   if (!current){ root.innerHTML='<span class="muted">Выберите шаблон слева</span>'; return; }
-
   if (current.description){
     const p = document.createElement("p");
     p.innerHTML = `<span class="help" title="${current.description}">ℹ️ Подсказка к шаблону</span>`;
     root.appendChild(p);
   }
-
-  (current.blocks||[]).forEach((b, idx)=>{
+  (current.blocks||[]).forEach((b)=>{
     const wrap = document.createElement("div"); wrap.className="kv";
-
-    // label + hint
     const lab = document.createElement("label");
     lab.innerHTML = `${b.label || b.type} <span class="muted" title="${(b.desc||'') + (b.flags? ('\\n'+flagHint(b.flags)) : '')}">ⓘ</span>`;
     wrap.appendChild(lab);
-
-    // control
     let ctrl = document.createElement("div");
     if (b.type==="StaticText" || b.type==="Greeting" || b.type==="Separator" || b.type==="DateTime" || b.type==="Table"){
       ctrl.innerHTML = `<span class="muted">Автоматический блок • ${b.type}</span>`;
     } else if (b.type==="InputField" || b.type==="ConditionalInput"){
-      const inp = document.createElement("input"); inp.type="text";
-      inp.placeholder = b.name || "field";
+      const inp = document.createElement("input"); inp.type="text"; inp.placeholder = b.name || "field";
       inp.oninput = ()=>{ values[b.name]=inp.value; };
       ctrl.appendChild(inp);
     } else if (b.type==="Choice"){
@@ -220,46 +202,37 @@ function renderInputs(){
       sel.onchange = ()=>{ values[b.name]=sel.value; };
       ctrl.appendChild(sel);
     } else if (b.type==="Toggle"){
-      const cb = document.createElement("input"); cb.type="checkbox";
-      cb.onchange = ()=>{ values[b.name]=cb.checked; };
+      const cb = document.createElement("input"); cb.type="checkbox"; cb.onchange = ()=>{ values[b.name]=cb.checked; };
       ctrl.appendChild(cb);
     } else if (b.type==="Repeater"){
       const area = document.createElement("textarea");
       area.placeholder = "По одному значению в строке (будет доступно как { value })";
-      area.oninput = ()=>{
-        values[b.name] = area.value.split("\\n").map(s=>s.trim()).filter(Boolean).map(x=>({value:x}));
-      };
+      area.oninput = ()=>{ values[b.name] = area.value.split("\\n").map(s=>s.trim()).filter(Boolean).map(x=>({value:x})); };
       ctrl.appendChild(area);
     } else {
       ctrl.innerHTML = `<span class="muted">Неизвестный блок: ${b.type}</span>`;
     }
-    wrap.appendChild(ctrl);
-    root.appendChild(wrap);
+    wrap.appendChild(ctrl); root.appendChild(wrap);
   });
 }
-
 async function renderPreview(){
   if (!current){ return; }
   const res = await fetch("render", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({template: current, values})});
   $id("preview").textContent = await res.text();
 }
-
 function clearValues(){ values={}; renderInputs(); $id("preview").textContent=""; }
 function copyResult(){ const t = $id("preview").textContent||""; navigator.clipboard.writeText(t); }
 function downloadTxt(){
   const t = $id("preview").textContent||"";
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([t], {type:"text/plain;charset=utf-8"}));
-  a.download = (current?.name||"reply") + ".txt";
-  a.click();
+  a.download = (current?.name||"reply") + ".txt"; a.click();
 }
-
 loadList();
 </script>
 </body></html>
 """
 
-# ====== ROUTES ======
 @bp.route("/")
 def index():
     return render_template_string(HTML)

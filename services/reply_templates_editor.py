@@ -1,5 +1,4 @@
 from __future__ import annotations
-import datetime
 from typing import Any, Dict, List
 
 from flask import Blueprint, render_template_string, request, jsonify
@@ -108,7 +107,7 @@ function renderFlagInputs(flags, idxPath){
   let html = '<div style="grid-column:1/-1"><small>Флаги форматирования:</small><div class="row" style="margin-top:4px">';
   for (let [key,title] of FLAG_FIELDS){
     const id = `flag_${idxPath}_${key}`;
-    html += `<label><input type="checkbox" id="${id}" ${flags[key]?'checked':''} onchange="setFlag('${idxPath}','${key}',this.checked)"> ${title}</label>`;
+    html += `<label><input type="checkbox" id="${id}" ${flags && flags[key]?'checked':''} onchange="setFlag('${idxPath}','${key}',this.checked)"> ${title}</label>`;
   }
   html += '</div></div>';
   return html;
@@ -142,7 +141,7 @@ function blockCard(b, idx, parentPath=""){
       break;
     case "Choice":
       body += `<div class="kv"><label>Имя поля</label><input type="text" value="${b.name||''}" onchange="setVal('${idxPath}','name',this.value)"></div>
-               <div class="kv" style="grid-column:1/-1"><label>Варианты (key = text)</label>
+               <div class="kv" style="grid-column:1/-1"><label>Варианты (key = text <small class='muted'>или JSON</small>)</label>
                  <textarea onchange="setJSON('${idxPath}','choices',this.value)">${JSON.stringify(b.choices||{},null,2)}</textarea>
                </div>`;
       break;
@@ -172,7 +171,6 @@ function blockCard(b, idx, parentPath=""){
 
   let inner = `<div class="block">${head}${body}</div>`;
 
-  // дочерние для Toggle/Repeater
   if (b.children){
     setTimeout(()=>{
       renderBlocksInto(`children_${idxPath}`, b.children, idxPath);
@@ -238,9 +236,33 @@ function moveBlock(idxPath, dir){
 function setVal(idxPath, key, val){
   const b = getByPath(idxPath); b[key]=val; renderAll();
 }
-
 function setFlag(idxPath, key, val){
-  const b = getByPath(idxPath); b.flags = b.flags||{}; b.flags[key]=val; /*без перерендера:*/ }
+  const b = getByPath(idxPath); b.flags = b.flags||{}; b.flags[key]=val;
+}
+
+// >>> ФИКС: сохранение choices (и любых объектов) из textarea
+function parseKeyValueOrJSON(raw) {
+  try {
+    const j = JSON.parse(raw);
+    if (j && typeof j === 'object' && !Array.isArray(j)) return j;
+  } catch (e) { /* формат строками */ }
+  const out = {};
+  for (let line of String(raw||'').split('\\n')) {
+    const s = line.trim(); if (!s) continue;
+    const eq = s.indexOf('=');
+    if (eq === -1) continue;
+    const k = s.slice(0, eq).trim();
+    const v = s.slice(eq + 1).trim();
+    if (k) out[k] = v;
+  }
+  return out;
+}
+function setJSON(idxPath, key, raw) {
+  const b = getByPath(idxPath);
+  b[key] = parseKeyValueOrJSON(raw);
+  renderAll();
+}
+// <<< ФИКС
 
 function getByPath(path){
   const parts = path.split(".").map(n=>parseInt(n,10));
@@ -280,7 +302,6 @@ loadTemplates(); createNew();
 </body></html>
 """
 
-# ====== ROUTES ======
 @bp.route("/")
 def index():
     return render_template_string(HTML)
@@ -331,4 +352,3 @@ service = ServiceBase(
     icon="🛠️",
     blueprint=bp,
 )
-    

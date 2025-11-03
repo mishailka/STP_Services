@@ -12,7 +12,7 @@ def _ensure_file():
             "description": "Автоприветствие, заявка/заказы опционально, текст с инструкциями",
             "version": 1,
             "blocks": [
-                {"type":"Greeting","label":"Приветствие","desc":"Автоматически генерирует приветствие по времени","flags":{"newlineAfter":True}},
+                {"type":"Greeting","label":"Приветствие","desc":"Автоприветствие по времени","flags":{"newlineAfter":True}},
                 {"type":"ConditionalInput","label":"Заявка","name":"req_number","prefix":"По заявке: ","desc":"Показывается, только если поле заполнено","flags":{"newlineAfter":True}},
                 {"type":"ConditionalInput","label":"Заказы","name":"orders","prefix":"По заказам: ","desc":"Список номеров через запятую","flags":{"newlineAfter":True}},
                 {"type":"StaticText","label":"Причина отказа","text":"Отчёты о нанесении отклонились из-за ошибки \"Отсутствует карточка товара (GTIN) в НК\".","flags":{"newline":True}},
