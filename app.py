@@ -5,6 +5,7 @@ from services.base import ServiceBase
 import pathlib
 import os
 
+
 def create_app():
     # Явно укажем папки, чтобы IDE/рабочая директория не мешали
     app = Flask(
