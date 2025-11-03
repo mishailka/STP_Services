@@ -7,7 +7,6 @@ import os
 
 
 def create_app():
-    # Явно укажем папки, чтобы IDE/рабочая директория не мешали
     app = Flask(
         __name__,
         template_folder=str(pathlib.Path(__file__).parent / "templates"),
@@ -16,7 +15,14 @@ def create_app():
     app.config["JSON_AS_ASCII"] = False
 
     # ✅ секрет для cookie-сессий
-    app.secret_key = os.environ.get("SECRET_KEY", "devkey-change-me")  # <— добавь эту строку
+    app.secret_key = os.environ.get("SECRET_KEY", "devkey-change-me")
+
+    # 🔓 Снимаем/поднимаем лимиты Flask/Werkzeug, которые дают 413
+    # Если хочешь полностью отключить — закомментируй MAX_CONTENT_LENGTH
+    app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024  # 2 ГБ на тело запроса
+    app.config["MAX_FORM_MEMORY_SIZE"] = 512 * 1024 * 1024      # 512 МБ на «нефайловые» поля (textarea)
+    app.config["MAX_FORM_PARTS"] = 200000                       # много частей формы (если понадобится)
+
 
     # Динамический поиск сервисов
     services = []
@@ -58,6 +64,23 @@ def create_app():
 
 
     return app
+
+    # Не обязательно, но удобно: дружелюбная страница на 413
+    from werkzeug.exceptions import RequestEntityTooLarge
+    @app.errorhandler(RequestEntityTooLarge)
+    def handle_413(e):
+        # Можно вернуть свой шаблон или редирект на нужный сервис
+        return render_template(
+            "index.html",
+            tiles=[{
+                "id": s.id,
+                "name": s.name,
+                "description": s.description,
+                "icon": s.icon,
+                "path": f"/services/{s.id}" if s.blueprint else None
+            } for s in app.extensions["services"]],
+            # Положи на страницу заметный баннер/алерт, если в шаблоне предусмотрено
+        ), 413
 
 if __name__ == "__main__":
     app = create_app()
