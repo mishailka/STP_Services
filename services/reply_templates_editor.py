@@ -13,6 +13,7 @@ HTML = """
 <title>Редактор шаблонов (визуальный)</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
+.help{display:inline-block;border-bottom:1px dotted #9aa0a6;cursor:help}
 :root{color-scheme:dark}
 body{font-family:system-ui,Inter,Segoe UI,Roboto,Arial;background:#0f1116;color:#e6e6e6;margin:0}
 .container{max-width:1200px;margin:0 auto;padding:20px}
@@ -29,7 +30,7 @@ button:hover{background:#324155}
 .badge{display:inline-block;padding:2px 8px;border:1px solid #334155;border-radius:999px;font-size:12px;color:#cbd5e1}
 .block{background:#0e1116;border:1px solid #2a3142;border-radius:10px;padding:10px;margin:8px 0}
 .block-head{display:flex;gap:8px;align-items:center;justify-content:space-between}
-.block-title{font-weight:600}
+.block-title{font-weight:600;display:flex;align-items:center;gap:6px}
 .block-body{margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .block small{color:#9aa0a6}
 .kv{display:grid;grid-template-columns:160px 1fr;gap:8px;align-items:center}
@@ -78,6 +79,7 @@ button:hover{background:#324155}
   </div>
 </div>
 <script>
+
 let currentId = null;
 function $id(x){return document.getElementById(x)}
 
@@ -86,6 +88,15 @@ const FLAG_FIELDS = [
   ["spaceBefore","Пробел до"],["spaceAfter","Пробел после"],
   ["upper","UPPER"],["lower","lower"],["capitalize","Capitalize"]
 ];
+
+function makeInfoIcon(titleText){
+  const i = document.createElement('span');
+  i.className = 'help';
+  i.textContent = 'ⓘ';
+  i.title = String(titleText || '');
+  i.style.marginLeft = '6px';
+  return i;
+}
 
 function blockDefaults(type){
   switch(type){
@@ -115,9 +126,10 @@ function renderFlagInputs(flags, idxPath){
 
 function blockCard(b, idx, parentPath=""){
   const idxPath = parentPath? `${parentPath}.${idx}` : `${idx}`;
+  // добавим id в заголовок, чтобы потом DOM-ом навесить иконку и title
   let head = `
     <div class="block-head">
-      <div class="block-title">${b.label || b.type} <small class="muted">(${b.type})</small></div>
+      <div class="block-title" id="title_${idxPath}">${b.label || b.type} <small class="muted">(${b.type})</small></div>
       <div class="row">
         <button onclick="moveBlock('${idxPath}',-1)">↑</button>
         <button onclick="moveBlock('${idxPath}',1)">↓</button>
@@ -181,13 +193,31 @@ function blockCard(b, idx, parentPath=""){
 
 function renderBlocksInto(rootId, blocksArr, parentPath=""){
   const root = document.getElementById(rootId);
+  // 1) рендерим HTML строкой
   root.innerHTML = blocksArr.map((b,i)=>blockCard(b,i,parentPath)).join("") || '<div class="muted">Пусто</div>';
+
+  // 2) DOM-ом навешиваем иконку с title на заголовок каждого блока (надёжные тултипы)
+  blocksArr.forEach((b,i)=>{
+    const idxPath = parentPath ? `${parentPath}.${i}` : `${i}`;
+    const titleEl = document.getElementById(`title_${idxPath}`);
+    if (titleEl){
+      const hint = (b.desc || '') + (b.flags ? ('\\n' + flagHint(b.flags)) : '');
+      titleEl.appendChild(makeInfoIcon(hint));
+    }
+  });
 }
 
 function renderAll(){
   const tpl = state.tpl;
+
+  // значения из state.tpl
   $id("tpl-name").value = tpl.name || "";
   $id("tpl-desc").value = tpl.description || "";
+
+  // ДВУСТОРОННЯЯ СВЯЗКА (фикс "сбрасывается имя")
+  $id("tpl-name").oninput = (e)=>{ state.tpl.name = e.target.value; };
+  $id("tpl-desc").oninput = (e)=>{ state.tpl.description = e.target.value; };
+
   renderBlocksInto("blocks", tpl.blocks||[]);
 }
 
@@ -240,12 +270,12 @@ function setFlag(idxPath, key, val){
   const b = getByPath(idxPath); b.flags = b.flags||{}; b.flags[key]=val;
 }
 
-// >>> ФИКС: сохранение choices (и любых объектов) из textarea
+// ФИКС: сохранение choices (и любых объектов) из textarea
 function parseKeyValueOrJSON(raw) {
   try {
     const j = JSON.parse(raw);
     if (j && typeof j === 'object' && !Array.isArray(j)) return j;
-  } catch (e) { /* формат строками */ }
+  } catch (e) {}
   const out = {};
   for (let line of String(raw||'').split('\\n')) {
     const s = line.trim(); if (!s) continue;
@@ -262,7 +292,6 @@ function setJSON(idxPath, key, raw) {
   b[key] = parseKeyValueOrJSON(raw);
   renderAll();
 }
-// <<< ФИКС
 
 function getByPath(path){
   const parts = path.split(".").map(n=>parseInt(n,10));

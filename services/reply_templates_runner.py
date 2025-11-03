@@ -1,20 +1,31 @@
 from __future__ import annotations
-import io, datetime, json
-from typing import Any, Dict, List
+import datetime, json
+from typing import Any, Dict
+from zoneinfo import ZoneInfo
 
-from flask import Blueprint, render_template_string, request, jsonify, send_file
+from flask import Blueprint, render_template_string, request, jsonify
 from .base import ServiceBase
 from .template_store import load_all
 
 bp = Blueprint("reply_templates_runner", __name__)
 
-def _greeting() -> str:
-    hour = datetime.datetime.now().hour
-    if 5 <= hour < 12:  return "Доброе утро!"
-    if 12 <= hour < 18: return "Добрый день!"
-    if 18 <= hour < 23: return "Добрый вечер!"
+# ---------- time helpers ----------
+def _now_in_tz(tzname: str | None) -> datetime.datetime:
+    if tzname:
+        try:
+            return datetime.datetime.now(ZoneInfo(tzname))
+        except Exception:
+            pass
+    return datetime.datetime.now()
+
+def _greeting_for(dt: datetime.datetime) -> str:
+    h = dt.hour
+    if 5 <= h < 12:   return "Доброе утро!"
+    if 12 <= h < 18:  return "Добрый день!"
+    if 18 <= h < 23:  return "Добрый вечер!"
     return "Доброй ночи!"
 
+# ---------- rendering ----------
 def _flags_wrap(text: str, flags: Dict[str, Any]) -> str:
     flags = flags or {}
     prefix = "\n" if flags.get("newline") else (" " if flags.get("spaceBefore") else "")
@@ -25,7 +36,7 @@ def _flags_wrap(text: str, flags: Dict[str, Any]) -> str:
     if flags.get("capitalize"): t = t.capitalize()
     return prefix + t + suffix
 
-def render_block(block: Dict[str, Any], values: Dict[str, Any]) -> str:
+def render_block(block: Dict[str, Any], values: Dict[str, Any], now_dt: datetime.datetime) -> str:
     t = block.get("type")
     flags = block.get("flags", {}) or {}
     out = ""
@@ -43,10 +54,10 @@ def render_block(block: Dict[str, Any], values: Dict[str, Any]) -> str:
         if val not in (None,"",[]): out = f"{block.get('prefix','')}{val}"
 
     elif t == "Greeting":
-        out = _greeting()
+        out = _greeting_for(now_dt)
 
     elif t == "DateTime":
-        out = datetime.datetime.now().strftime(block.get("format","%Y-%m-%d %H:%M"))
+        out = now_dt.strftime(block.get("format","%Y-%m-%d %H:%M"))
 
     elif t == "Separator":
         out = str(block.get("char","—")) * int(block.get("repeat",20))
@@ -59,12 +70,12 @@ def render_block(block: Dict[str, Any], values: Dict[str, Any]) -> str:
     elif t == "Toggle":
         if values.get(block.get("name")):
             for ch in block.get("children", []):
-                out += render_block(ch, values)
+                out += render_block(ch, values, now_dt)
 
     elif t == "Repeater":
         for item in (values.get(block.get("name")) or []):
             for ch in block.get("children", []):
-                out += render_block(ch, item if isinstance(item, dict) else {"value":item})
+                out += render_block(ch, item if isinstance(item, dict) else {"value":item}, now_dt)
 
     elif t == "Table":
         headers = block.get("headers", [])
@@ -77,12 +88,13 @@ def render_block(block: Dict[str, Any], values: Dict[str, Any]) -> str:
 
     return _flags_wrap(out, flags)
 
-def render_template_obj(tpl: Dict[str, Any], values: Dict[str, Any]) -> str:
+def render_template_obj(tpl: Dict[str, Any], values: Dict[str, Any], now_dt: datetime.datetime) -> str:
     res = ""
     for b in tpl.get("blocks", []):
-        res += render_block(b, values)
+        res += render_block(b, values, now_dt)
     return res.strip()
 
+# ---------- UI ----------
 HTML = """
 <!doctype html>
 <html lang="ru"><meta charset="utf-8">
@@ -117,6 +129,10 @@ pre{white-space:pre-wrap;word-break:break-word;background:#0e1116;border:1px sol
     </div>
     <div class="card">
       <strong id="tpl-name">(не выбран)</strong>
+      <div class="kv">
+        <label>Имя файла</label>
+        <input id="fname" type="text" placeholder="reply">
+      </div>
       <div id="inputs"></div>
       <div class="row" style="margin-top:8px">
         <button onclick="renderPreview()">🔄 Обновить предпросмотр</button>
@@ -161,6 +177,7 @@ async function openTemplate(id){
   const data = await fetch("get?id="+id).then(r=>r.json());
   current = data; values = {};
   $id("tpl-name").textContent = current.name || "(без имени)";
+  $id("fname").value = (current.name || "reply").replace(/\\s+/g, "_");
   renderInputs();
   $id("preview").textContent = "";
 }
@@ -217,16 +234,23 @@ function renderInputs(){
 }
 async function renderPreview(){
   if (!current){ return; }
-  const res = await fetch("render", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({template: current, values})});
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  const res = await fetch("render", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ template: current, values, timezone: tz })
+  });
   $id("preview").textContent = await res.text();
 }
 function clearValues(){ values={}; renderInputs(); $id("preview").textContent=""; }
 function copyResult(){ const t = $id("preview").textContent||""; navigator.clipboard.writeText(t); }
 function downloadTxt(){
   const t = $id("preview").textContent||"";
+  const custom = ($id("fname")?.value || "").trim();
+  const name = custom || (current?.name || "reply");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([t], {type:"text/plain;charset=utf-8"}));
-  a.download = (current?.name||"reply") + ".txt"; a.click();
+  a.download = name + ".txt"; a.click();
 }
 loadList();
 </script>
@@ -255,12 +279,14 @@ def render_view():
     payload = request.get_json(force=True)
     tpl = payload.get("template", {})
     vals = payload.get("values", {})
-    return render_template_obj(tpl, vals)
+    tz = payload.get("timezone")
+    now_dt = _now_in_tz(tz)
+    return render_template_obj(tpl, vals, now_dt)
 
 service = ServiceBase(
     id="reply-templates-runner",
     name="Генератор ответов",
-    description="Выбор шаблона, ввод значений, предпросмотр и экспорт .txt",
+    description="Выбор шаблона, ввод значений, предпросмотр и экспорт .txt (таймзона пользователя)",
     icon="🧩",
     blueprint=bp,
 )
