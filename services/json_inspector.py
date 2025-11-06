@@ -275,15 +275,25 @@ def _parse_codes(text: str) -> Iterable[str]:
         yield s.replace("\\x1D", "\x1D")
 
 _GT_SPLIT = re.compile(r"(?:<GT>|&lt;GT&gt;)")
+_GS_SPLIT = re.compile(r"(?:<GS>|&lt;GS&gt;|\x1D)")
+_ANY_TERM_SPLIT = re.compile(r"(?:<GT>|&lt;GT&gt;|<GS>|&lt;GS&gt;|\x1D)")
 
 def _cut_at_gt(code: str) -> str:
     if not code:
         return ""
     return _GT_SPLIT.split(code, 1)[0]
 
+# --- XML: режем по GT/GS, затем чистим ---
 def _xml_prepare_code(raw_code: str) -> str:
+    """
+    Для XML:
+      - удаляем всё справа от любого терминатора (<GT>, <GS>, их HTML-варианты или \x1D),
+      - убираем управляющие символы и текстовые маркеры GS.
+    """
     s = (raw_code or "").strip()
-    s = _cut_at_gt(s)  # режем по <GT>, отбрасывая хвост
+    # Обрезаем по первому встреченному терминатору
+    s = _ANY_TERM_SPLIT.split(s, 1)[0]
+    # На всякий случай вычищаем остатки управляющих/текстовых маркеров
     s = s.replace("\x1D", "").replace("<GS>", "").replace("&lt;GS&gt;", "")
     return s
 
