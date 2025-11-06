@@ -274,18 +274,25 @@ def _parse_codes(text: str) -> Iterable[str]:
         # он всё равно будет очищен для XML и заменён для CSV
         yield s.replace("\\x1D", "\x1D")
 
+_GT_SPLIT = re.compile(r"(?:<GT>|&lt;GT&gt;)")
+
 def _cut_at_gt(code: str) -> str:
-    idx = code.find("<GT>")
-    if idx >= 0:
-        return code[:idx]
-    idx = code.find("&lt;GT&gt;")
-    if idx >= 0:
-        return code[:idx]
-    return code
+    """
+    Возвращает всё слева от <GT> / &lt;GT&gt;.
+    Если маркера нет — возвращает исходную строку.
+    """
+    if not code:
+        return ""
+    return _GT_SPLIT.split(code, 1)[0]
 
 def _xml_prepare_code(raw_code: str) -> str:
+    """
+    Для XML:
+      - режем по <GT> (или &lt;GT&gt;), отбрасывая всё справа и сам маркер,
+      - убираем управляющие символы группы и текстовые маркеры GS.
+    """
     s = (raw_code or "").strip()
-    s = _cut_at_gt(s)
+    s = _cut_at_gt(s)  # <--- теперь гарантированно обрезает всё справа от <GT>
     s = s.replace("\x1D", "").replace("<GS>", "").replace("&lt;GS&gt;", "")
     return s
 
@@ -552,3 +559,14 @@ service = ServiceBase(
     icon="🧪",
     blueprint=bp,
 )
+
+
+if __name__ == "__main__":
+    # вход
+    raw = "01KI123456789<GT>что-то справа"
+    print(_xml_prepare_code(raw))
+    # -> "01KI123456789"
+
+    raw = "01KI123\x1D<GS>ABC&lt;GT&gt;RIGHT"
+    print(_xml_prepare_code(raw))
+    # -> "01KI123ABC"
