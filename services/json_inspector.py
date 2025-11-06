@@ -277,36 +277,26 @@ def _parse_codes(text: str) -> Iterable[str]:
 _GT_SPLIT = re.compile(r"(?:<GT>|&lt;GT&gt;)")
 
 def _cut_at_gt(code: str) -> str:
-    """
-    Возвращает всё слева от <GT> / &lt;GT&gt;.
-    Если маркера нет — возвращает исходную строку.
-    """
     if not code:
         return ""
     return _GT_SPLIT.split(code, 1)[0]
 
 def _xml_prepare_code(raw_code: str) -> str:
-    """
-    Для XML:
-      - режем по <GT> (или &lt;GT&gt;), отбрасывая всё справа и сам маркер,
-      - убираем управляющие символы группы и текстовые маркеры GS.
-    """
     s = (raw_code or "").strip()
-    s = _cut_at_gt(s)  # <--- теперь гарантированно обрезает всё справа от <GT>
+    s = _cut_at_gt(s)  # режем по <GT>, отбрасывая хвост
     s = s.replace("\x1D", "").replace("<GS>", "").replace("&lt;GS&gt;", "")
     return s
 
 def _csv_stream(codes_iter: Iterable[str]) -> Iterable[bytes]:
     """
     Стриминг CSV: одна колонка, одна строка на код.
-    <GT>/&lt;GT&gt; → \x1D только для CSV.
+    <GT>/&lt;GT&gt; → \x1D, хвост сохраняется (как и работало ранее).
     """
     first_yielded = False
     for c in codes_iter:
         c = (c or "")
         c = c.replace("<GT>", "\x1D").replace("&lt;GT&gt;", "\x1D")
         c = c.replace("\r", "")
-        # добавляем \n построчно
         line = (c + "\n").encode("utf-8-sig") if not first_yielded else (c + "\n").encode("utf-8")
         first_yielded = True
         yield line
