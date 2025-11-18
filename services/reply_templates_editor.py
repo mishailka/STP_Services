@@ -35,6 +35,7 @@ button:hover{background:#324155}
 .block small{color:#9aa0a6}
 .kv{display:grid;grid-template-columns:160px 1fr;gap:8px;align-items:center}
 .hr{height:1px;background:#232837;margin:10px 0}
+.muted{color:#9aa0a6}
 </style>
 <body><div class="container">
   <h2>🛠️ Редактор шаблонов</h2>
@@ -100,33 +101,85 @@ function makeInfoIcon(titleText){
 
 function blockDefaults(type){
   switch(type){
-    case "Greeting": return {type, label:"Приветствие", desc:"Автоприветствие по времени", flags:{newlineAfter:true}};
-    case "StaticText": return {type, label:"Неизменный текст", text:"Текст...", desc:"Просто текст", flags:{newline:true}};
-    case "InputField": 
+    case "Greeting":
+      return {type, label:"Приветствие", desc:"Автоприветствие по времени", flags:{newlineAfter:true}};
+    case "StaticText":
+      return {type, label:"Неизменный текст", text:"Текст...", desc:"Просто текст", flags:{newline:true}};
+    case "InputField":
       return {
         type,
         label:"Поле ввода",
         name:"field",
         desc:"Значение всегда вставляется",
-        multiline:false,        // ⬅️ новое поле
+        multiline:false,
         flags:{}
       };
-     case "ConditionalInput": 
+    case "ConditionalInput":
       return {
         type,
         label:"Условное поле",
         name:"opt",
         prefix:"По заявке: ",
         desc:"Показывается, если поле заполнено",
-        multiline:false,        // ⬅️ новое поле
+        multiline:false,
         flags:{newlineAfter:true}
       };
-    case "Choice": return {type, label:"Выбор", name:"state", choices:{"ok":"Готов к вводу в оборот","km":"Готов к заказу КМ"}, desc:"Выбор по ключу", flags:{newline:true}};
-    case "Toggle": return {type, label:"Переключатель (секция)", name:"need_note", children:[{type:"StaticText", label:"Текст секции", text:"Примечание...", flags:{newline:true}}], desc:"Вкл/выкл секцию", flags:{}};
-    case "Repeater": return {type, label:"Повторитель", name:"items", children:[{type:"StaticText", text:"• ", flags:{}},{type:"InputField", name:"value", flags:{newlineAfter:true}}], desc:"Повторить блоки по массиву", flags:{}};
-    case "Table": return {type, label:"Таблица", name:"rows", headers:["GTIN","Статус","Комментарий"], desc:"Markdown-таблица из массива объектов", flags:{newline:true}};
-    case "Separator": return {type, label:"Разделитель", char:"—", repeat:20, desc:"Линия", flags:{newline:true,newlineAfter:true}};
-    case "DateTime": return {type, label:"Дата/время", format:"%Y-%m-%d %H:%M", desc:"Текущие дата/время на момент генерации", flags:{newline:true}};
+    case "Choice":
+      return {
+        type,
+        label:"Выбор",
+        name:"state",
+        choices:{"ok":"Готов к вводу в оборот","km":"Готов к заказу КМ"},
+        desc:"Выбор по ключу",
+        flags:{newline:true}
+      };
+    case "Toggle":
+      return {
+        type,
+        label:"Переключатель (секция)",
+        name:"need_note",
+        children:[{type:"StaticText", label:"Текст секции", text:"Примечание...", flags:{newline:true}}],
+        desc:"Вкл/выкл секцию",
+        flags:{}
+      };
+    case "Repeater":
+      return {
+        type,
+        label:"Повторитель",
+        name:"items",
+        children:[
+          {type:"StaticText", text:"• ", flags:{}},
+          {type:"InputField", name:"value", multiline:false, flags:{newlineAfter:true}}
+        ],
+        desc:"Повторить блоки по массиву",
+        flags:{}
+      };
+    case "Table":
+      return {
+        type,
+        label:"Таблица",
+        name:"rows",
+        headers:["GTIN","Статус","Комментарий"],
+        desc:"Markdown-таблица из массива объектов",
+        flags:{newline:true}
+      };
+    case "Separator":
+      return {
+        type,
+        label:"Разделитель",
+        char:"—",
+        repeat:20,
+        desc:"Линия",
+        flags:{newline:true,newlineAfter:true}
+      };
+    case "DateTime":
+      return {
+        type,
+        label:"Дата/время",
+        format:"%Y-%m-%d %H:%M",
+        desc:"Текущие дата/время на момент генерации",
+        flags:{newline:true}
+      };
   }
   return {type, label:type, flags:{}};
 }
@@ -143,7 +196,7 @@ function renderFlagInputs(flags, idxPath){
 
 function blockCard(b, idx, parentPath=""){
   const idxPath = parentPath? `${parentPath}.${idx}` : `${idx}`;
-  // добавим id в заголовок, чтобы потом DOM-ом навесить иконку и title
+  // заголовок с id, чтобы навесить иконку-подсказку
   let head = `
     <div class="block-head">
       <div class="block-title" id="title_${idxPath}">${b.label || b.type} <small class="muted">(${b.type})</small></div>
@@ -153,25 +206,28 @@ function blockCard(b, idx, parentPath=""){
         <button onclick="removeBlock('${idxPath}')">✖</button>
       </div>
     </div>`;
+
   let body = `<div class="block-body">
     <div class="kv"><label>Метка</label><input type="text" value="${b.label||''}" onchange="setVal('${idxPath}','label',this.value)"></div>
     <div class="kv"><label>Описание</label><input type="text" value="${b.desc||''}" onchange="setVal('${idxPath}','desc',this.value)"></div>
   `;
+
   switch(b.type){
     case "StaticText":
       body += `<div class="kv"><label>Текст</label><textarea onchange="setVal('${idxPath}','text',this.value)">${b.text||''}</textarea></div>`;
       break;
-       case "InputField":
+
+    case "InputField":
       body += `
         <div class="kv">
           <label>Имя поля</label>
-          <input type="text" value="${b.name||''}" 
+          <input type="text" value="${b.name||''}"
                  onchange="setVal('${idxPath}','name',this.value)">
         </div>
         <div class="kv">
           <label>Мультиввод</label>
           <label style="display:flex;align-items:center;gap:4px;">
-            <input type="checkbox" ${b.multiline ? 'checked' : ''} 
+            <input type="checkbox" ${b.multiline ? 'checked' : ''}
                    onchange="setVal('${idxPath}','multiline',this.checked)">
             <span>Несколько строк</span>
           </label>
@@ -183,52 +239,59 @@ function blockCard(b, idx, parentPath=""){
       body += `
         <div class="kv">
           <label>Имя поля</label>
-          <input type="text" value="${b.name||''}" 
+          <input type="text" value="${b.name||''}"
                  onchange="setVal('${idxPath}','name',this.value)">
         </div>
         <div class="kv">
           <label>Префикс</label>
-          <input type="text" value="${b.prefix||''}" 
+          <input type="text" value="${b.prefix||''}"
                  onchange="setVal('${idxPath}','prefix',this.value)">
         </div>
         <div class="kv">
           <label>Мультиввод</label>
           <label style="display:flex;align-items:center;gap:4px;">
-            <input type="checkbox" ${b.multiline ? 'checked' : ''} 
+            <input type="checkbox" ${b.multiline ? 'checked' : ''}
                    onchange="setVal('${idxPath}','multiline',this.checked)">
             <span>Несколько строк</span>
           </label>
         </div>
       `;
       break;
+
     case "Choice":
       body += `<div class="kv"><label>Имя поля</label><input type="text" value="${b.name||''}" onchange="setVal('${idxPath}','name',this.value)"></div>
                <div class="kv" style="grid-column:1/-1"><label>Варианты (key = text <small class='muted'>или JSON</small>)</label>
                  <textarea onchange="setJSON('${idxPath}','choices',this.value)">${JSON.stringify(b.choices||{},null,2)}</textarea>
                </div>`;
       break;
+
     case "Toggle":
       body += `<div class="kv"><label>Имя флага</label><input type="text" value="${b.name||''}" onchange="setVal('${idxPath}','name',this.value)"></div>
                <div style="grid-column:1/-1"><small>Дочерние блоки:</small><div id="children_${idxPath}"></div>
                <button onclick="addChild('${idxPath}')">＋ Блок внутрь</button></div>`;
       break;
+
     case "Repeater":
       body += `<div class="kv"><label>Имя массива</label><input type="text" value="${b.name||''}" onchange="setVal('${idxPath}','name',this.value)"></div>
                <div style="grid-column:1/-1"><small>Дочерние блоки (рендерятся для каждого элемента):</small><div id="children_${idxPath}"></div>
                <button onclick="addChild('${idxPath}')">＋ Блок внутрь</button></div>`;
       break;
+
     case "Table":
       body += `<div class="kv"><label>Имя массива</label><input type="text" value="${b.name||''}" onchange="setVal('${idxPath}','name',this.value)"></div>
                <div class="kv"><label>Заголовки</label><input type="text" value="${(b.headers||[]).join(',')}" onchange="setVal('${idxPath}','headers',this.value.split(',').map(s=>s.trim()).filter(Boolean))"></div>`;
       break;
+
     case "Separator":
       body += `<div class="kv"><label>Символ</label><input type="text" value="${b.char||'—'}" onchange="setVal('${idxPath}','char',this.value)"></div>
                <div class="kv"><label>Повторов</label><input type="text" value="${b.repeat||20}" onchange="setVal('${idxPath}','repeat',parseInt(this.value)||0)"></div>`;
       break;
+
     case "DateTime":
       body += `<div class="kv"><label>Формат</label><input type="text" value="${b.format||'%Y-%m-%d %H:%M'}" onchange="setVal('${idxPath}','format',this.value)"></div>`;
       break;
   }
+
   body += renderFlagInputs(b.flags||{}, idxPath) + "</div>";
 
   let inner = `<div class="block">${head}${body}</div>`;
@@ -243,10 +306,8 @@ function blockCard(b, idx, parentPath=""){
 
 function renderBlocksInto(rootId, blocksArr, parentPath=""){
   const root = document.getElementById(rootId);
-  // 1) рендерим HTML строкой
   root.innerHTML = blocksArr.map((b,i)=>blockCard(b,i,parentPath)).join("") || '<div class="muted">Пусто</div>';
 
-  // 2) DOM-ом навешиваем иконку с title на заголовок каждого блока (надёжные тултипы)
   blocksArr.forEach((b,i)=>{
     const idxPath = parentPath ? `${parentPath}.${i}` : `${i}`;
     const titleEl = document.getElementById(`title_${idxPath}`);
@@ -260,11 +321,9 @@ function renderBlocksInto(rootId, blocksArr, parentPath=""){
 function renderAll(){
   const tpl = state.tpl;
 
-  // значения из state.tpl
   $id("tpl-name").value = tpl.name || "";
   $id("tpl-desc").value = tpl.description || "";
 
-  // ДВУСТОРОННЯЯ СВЯЗКА (фикс "сбрасывается имя")
   $id("tpl-name").oninput = (e)=>{ state.tpl.name = e.target.value; };
   $id("tpl-desc").oninput = (e)=>{ state.tpl.description = e.target.value; };
 
@@ -273,18 +332,27 @@ function renderAll(){
 
 const state = { list: [], tpl: {name:"Новый шаблон", description:"", version:1, blocks:[]} };
 
-function createNew(){ currentId = null; state.tpl = {name:"Новый шаблон", description:"", version:1, blocks:[]}; renderAll(); }
+function createNew(){
+  currentId = null;
+  state.tpl = {name:"Новый шаблон", description:"", version:1, blocks:[]};
+  renderAll();
+}
 
 async function loadTemplates(){
-  const res = await fetch("list"); state.list = await res.json();
-  const meta = await fetch("meta").then(r=>r.json()); $id("store-path").textContent = meta.path || "";
+  const res = await fetch("list");
+  state.list = await res.json();
+  const meta = await fetch("meta").then(r=>r.json());
+  $id("store-path").textContent = meta.path || "";
   const listEl = document.getElementById("tpl-list");
   listEl.innerHTML = state.list.map(t=>`<a href="#" onclick="loadOne(${t.id});return false;">${t.name}</a>`).join("") || '<span class="muted">Нет шаблонов</span>';
 }
 
 async function loadOne(id){
-  const r = await fetch("get?id="+id); const tpl = await r.json();
-  currentId = id; state.tpl = tpl; renderAll();
+  const r = await fetch("get?id="+id);
+  const tpl = await r.json();
+  currentId = id;
+  state.tpl = tpl;
+  renderAll();
 }
 
 function addBlock(type){
@@ -308,19 +376,24 @@ function removeBlock(idxPath){
 
 function moveBlock(idxPath, dir){
   const {arr,i} = getArrAndIndex(idxPath);
-  const j = i + dir; if (j<0 || j>=arr.length) return;
+  const j = i + dir;
+  if (j<0 || j>=arr.length) return;
   [arr[i], arr[j]] = [arr[j], arr[i]];
   renderAll();
 }
 
 function setVal(idxPath, key, val){
-  const b = getByPath(idxPath); b[key]=val; renderAll();
-}
-function setFlag(idxPath, key, val){
-  const b = getByPath(idxPath); b.flags = b.flags||{}; b.flags[key]=val;
+  const b = getByPath(idxPath);
+  b[key]=val;
+  renderAll();
 }
 
-// ФИКС: сохранение choices (и любых объектов) из textarea
+function setFlag(idxPath, key, val){
+  const b = getByPath(idxPath);
+  b.flags = b.flags||{};
+  b.flags[key]=val;
+}
+
 function parseKeyValueOrJSON(raw) {
   try {
     const j = JSON.parse(raw);
@@ -337,6 +410,7 @@ function parseKeyValueOrJSON(raw) {
   }
   return out;
 }
+
 function setJSON(idxPath, key, raw) {
   const b = getByPath(idxPath);
   b[key] = parseKeyValueOrJSON(raw);
@@ -367,16 +441,22 @@ async function saveTemplate(){
   if (currentId!==null) payload.id = currentId;
   await fetch("save", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)});
   await loadTemplates();
-  if (currentId===null){ const last = state.list[state.list.length-1]; if (last) loadOne(last.id); }
+  if (currentId===null){
+    const last = state.list[state.list.length-1];
+    if (last) loadOne(last.id);
+  }
 }
 
 async function deleteTemplate(){
   if (currentId===null) return;
   await fetch("delete", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({id: currentId})});
-  currentId = null; await loadTemplates(); createNew();
+  currentId = null;
+  await loadTemplates();
+  createNew();
 }
 
-loadTemplates(); createNew();
+loadTemplates();
+createNew();
 </script>
 </body></html>
 """

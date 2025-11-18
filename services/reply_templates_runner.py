@@ -192,86 +192,69 @@ function flagHint(flags){
   if (f.capitalize) arr.push("Capitalize");
   return arr.join(", ");
 }
+
+// ОБНОВЛЁННЫЙ renderInputs с поддержкой multiline
 function renderInputs(){
   const root = $id("inputs");
   root.innerHTML = "";
-
   if (!current){
-    root.innerHTML = '<span class="muted">Выберите шаблон слева</span>';
+    root.innerHTML='<span class="muted">Выберите шаблон слева</span>';
     return;
   }
-
   if (current.description){
     const p = document.createElement("p");
     p.innerHTML = `<span class="help" title="${current.description}">ℹ️ Подсказка к шаблону</span>`;
     root.appendChild(p);
   }
-
-  (current.blocks || []).forEach((b) => {
-    const wrap = document.createElement("div");
-    wrap.className = "kv";
-
+  (current.blocks||[]).forEach((b)=>{
+    const wrap = document.createElement("div"); wrap.className="kv";
     const lab = document.createElement("label");
-    lab.innerHTML = `${b.label || b.type} <span class="muted" title="${(b.desc || '') + (b.flags ? ('\n' + flagHint(b.flags)) : '')}">ⓘ</span>`;
+    lab.innerHTML = `${b.label || b.type} <span class="muted" title="${(b.desc||'') + (b.flags? ('\\n'+flagHint(b.flags)) : '')}">ⓘ</span>`;
     wrap.appendChild(lab);
-
     let ctrl = document.createElement("div");
 
-    if (b.type === "StaticText" || b.type === "Greeting" || b.type === "Separator" || b.type === "DateTime" || b.type === "Table") {
+    if (b.type==="StaticText" || b.type==="Greeting" || b.type==="Separator" || b.type==="DateTime" || b.type==="Table"){
       ctrl.innerHTML = `<span class="muted">Автоматический блок • ${b.type}</span>`;
 
-    } else if (b.type === "InputField" || b.type === "ConditionalInput") {
-      // 👉 здесь добавлена поддержка мультиввода
-      if (b.multiline) {
+    } else if (b.type==="InputField" || b.type==="ConditionalInput"){
+      if (b.multiline){
         const area = document.createElement("textarea");
         area.placeholder = b.name || "field";
-        area.oninput = () => { values[b.name] = area.value; };
+        area.oninput = ()=>{ values[b.name]=area.value; };
         ctrl.appendChild(area);
       } else {
         const inp = document.createElement("input");
-        inp.type = "text";
+        inp.type="text";
         inp.placeholder = b.name || "field";
-        inp.oninput = () => { values[b.name] = inp.value; };
+        inp.oninput = ()=>{ values[b.name]=inp.value; };
         ctrl.appendChild(inp);
       }
 
-    } else if (b.type === "Choice") {
+    } else if (b.type==="Choice"){
       const sel = document.createElement("select");
       const ch = b.choices || {};
-      sel.innerHTML =
-        '<option value="">— выберите —</option>' +
-        Object.keys(ch)
-          .map(k => `<option value="${k}">${k} — ${ch[k]}</option>`)
-          .join("");
-      sel.onchange = () => { values[b.name] = sel.value; };
+      sel.innerHTML = '<option value="">— выберите —</option>' + Object.keys(ch).map(k=>`<option value="${k}">${k} — ${ch[k]}</option>`).join("");
+      sel.onchange = ()=>{ values[b.name]=sel.value; };
       ctrl.appendChild(sel);
 
-    } else if (b.type === "Toggle") {
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.onchange = () => { values[b.name] = cb.checked; };
+    } else if (b.type==="Toggle"){
+      const cb = document.createElement("input"); cb.type="checkbox"; cb.onchange = ()=>{ values[b.name]=cb.checked; };
       ctrl.appendChild(cb);
 
-    } else if (b.type === "Repeater") {
+    } else if (b.type==="Repeater"){
       const area = document.createElement("textarea");
       area.placeholder = "По одному значению в строке (будет доступно как { value })";
-      area.oninput = () => {
-        values[b.name] = area.value
-          .split("\\n")
-          .map(s => s.trim())
-          .filter(Boolean)
-          .map(x => ({ value: x }));
-      };
+      area.oninput = ()=>{ values[b.name] = area.value.split("\\n").map(s=>s.trim()).filter(Boolean).map(x=>({value:x})); };
       ctrl.appendChild(area);
 
     } else {
       ctrl.innerHTML = `<span class="muted">Неизвестный блок: ${b.type}</span>`;
     }
 
-    wrap.appendChild(ctrl);
-    root.appendChild(wrap);
+    wrap.appendChild(ctrl); root.appendChild(wrap);
   });
 }
+
 async function renderPreview(){
   if (!current){ return; }
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
