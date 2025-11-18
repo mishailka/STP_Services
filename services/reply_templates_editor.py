@@ -102,8 +102,25 @@ function blockDefaults(type){
   switch(type){
     case "Greeting": return {type, label:"Приветствие", desc:"Автоприветствие по времени", flags:{newlineAfter:true}};
     case "StaticText": return {type, label:"Неизменный текст", text:"Текст...", desc:"Просто текст", flags:{newline:true}};
-    case "InputField": return {type, label:"Поле ввода", name:"field", desc:"Значение всегда вставляется", flags:{}};
-    case "ConditionalInput": return {type, label:"Условное поле", name:"opt", prefix:"По заявке: ", desc:"Показывается, если поле заполнено", flags:{newlineAfter:true}};
+    case "InputField": 
+      return {
+        type,
+        label:"Поле ввода",
+        name:"field",
+        desc:"Значение всегда вставляется",
+        multiline:false,        // ⬅️ новое поле
+        flags:{}
+      };
+     case "ConditionalInput": 
+      return {
+        type,
+        label:"Условное поле",
+        name:"opt",
+        prefix:"По заявке: ",
+        desc:"Показывается, если поле заполнено",
+        multiline:false,        // ⬅️ новое поле
+        flags:{newlineAfter:true}
+      };
     case "Choice": return {type, label:"Выбор", name:"state", choices:{"ok":"Готов к вводу в оборот","km":"Готов к заказу КМ"}, desc:"Выбор по ключу", flags:{newline:true}};
     case "Toggle": return {type, label:"Переключатель (секция)", name:"need_note", children:[{type:"StaticText", label:"Текст секции", text:"Примечание...", flags:{newline:true}}], desc:"Вкл/выкл секцию", flags:{}};
     case "Repeater": return {type, label:"Повторитель", name:"items", children:[{type:"StaticText", text:"• ", flags:{}},{type:"InputField", name:"value", flags:{newlineAfter:true}}], desc:"Повторить блоки по массиву", flags:{}};
@@ -144,12 +161,45 @@ function blockCard(b, idx, parentPath=""){
     case "StaticText":
       body += `<div class="kv"><label>Текст</label><textarea onchange="setVal('${idxPath}','text',this.value)">${b.text||''}</textarea></div>`;
       break;
-    case "InputField":
-      body += `<div class="kv"><label>Имя поля</label><input type="text" value="${b.name||''}" onchange="setVal('${idxPath}','name',this.value)"></div>`;
+       case "InputField":
+      body += `
+        <div class="kv">
+          <label>Имя поля</label>
+          <input type="text" value="${b.name||''}" 
+                 onchange="setVal('${idxPath}','name',this.value)">
+        </div>
+        <div class="kv">
+          <label>Мультиввод</label>
+          <label style="display:flex;align-items:center;gap:4px;">
+            <input type="checkbox" ${b.multiline ? 'checked' : ''} 
+                   onchange="setVal('${idxPath}','multiline',this.checked)">
+            <span>Несколько строк</span>
+          </label>
+        </div>
+      `;
       break;
+
     case "ConditionalInput":
-      body += `<div class="kv"><label>Имя поля</label><input type="text" value="${b.name||''}" onchange="setVal('${idxPath}','name',this.value)"></div>
-               <div class="kv"><label>Префикс</label><input type="text" value="${b.prefix||''}" onchange="setVal('${idxPath}','prefix',this.value)"></div>`;
+      body += `
+        <div class="kv">
+          <label>Имя поля</label>
+          <input type="text" value="${b.name||''}" 
+                 onchange="setVal('${idxPath}','name',this.value)">
+        </div>
+        <div class="kv">
+          <label>Префикс</label>
+          <input type="text" value="${b.prefix||''}" 
+                 onchange="setVal('${idxPath}','prefix',this.value)">
+        </div>
+        <div class="kv">
+          <label>Мультиввод</label>
+          <label style="display:flex;align-items:center;gap:4px;">
+            <input type="checkbox" ${b.multiline ? 'checked' : ''} 
+                   onchange="setVal('${idxPath}','multiline',this.checked)">
+            <span>Несколько строк</span>
+          </label>
+        </div>
+      `;
       break;
     case "Choice":
       body += `<div class="kv"><label>Имя поля</label><input type="text" value="${b.name||''}" onchange="setVal('${idxPath}','name',this.value)"></div>
